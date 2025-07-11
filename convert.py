@@ -58,12 +58,7 @@ def clean_field(field):
     h.list_indent = 0
     h.unicode_snob = True
     md = h.handle(field)
-    # Remove extra blank lines between bullets (• ...\n\n• ... -> • ...\n• ...)
-    md = re.sub(r'(• [^\n]+)\n{2,}(?=• )', r'\1\n', md)
-    # Unescape - if html2text escapes it (rare, but for completeness)
-    md = html.unescape(md)
-    # Optionally, clean up 3+ blank lines
-    md = re.sub(r'\n{3,}', '\n\n', md)
+
     return md.strip()
 
 def sanitize_filename(name):
