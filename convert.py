@@ -35,12 +35,29 @@ def get_notes_in_deck(deck_name):
     return notes_info
 
 def clean_field(field):
-    """Remove HTML tags and preserve line breaks for Markdown."""
+    """Convert HTML lists to Markdown with •, remove HTML tags, decode HTML entities, and preserve line breaks, including after TODO and similar markers. Also translate <br> and <div> blocks to whitespace, and ensure closing tags like </span></div> are also replaced by newlines. Handles <li> even if surrounded by any tags."""
+    import html
     if field is None:
         return ""
-    field = re.sub(r'<[^>]+>', '', field)  # Remove HTML tags
-    field = field.replace('\n', '  \n').strip()  # Markdown line breaks
-    return field
+    # Convert <br> and <div> (and variants) to newlines
+    field = re.sub(r'<br\s*/?>', '\n', field, flags=re.IGNORECASE)
+    field = re.sub(r'<div[^>]*>', '\n', field, flags=re.IGNORECASE)
+    field = re.sub(r'</div>', '\n', field, flags=re.IGNORECASE)
+    # Also replace closing </span> and similar inline tags with a newline if followed by </div> or </li>
+    field = re.sub(r'</span>\s*(</div>|</li>)', '\n', field, flags=re.IGNORECASE)
+    # Convert <li> even if surrounded by any tags to '• ...' and collapse whitespace inside
+    field = re.sub(r'(?:<[^>]*>)*<li[^>]*>(.*?)</li>(?:<[^>]*>)*', lambda m: '• ' + ' '.join(m.group(1).split()), field, flags=re.DOTALL|re.IGNORECASE)
+    # Remove <ul>, <ol>, <span>, <p>, <b> tags
+    field = re.sub(r'</?(ul|ol|span|p|b)[^>]*>', '', field)
+    # Remove any other HTML tags
+    field = re.sub(r'<[^>]+>', '', field)
+    # Decode HTML entities (e.g., &gt; to >)
+    field = html.unescape(field)
+    # Ensure newlines after TODO or similar all-caps markers
+    field = re.sub(r'(\b[A-Z]{2,}\b)(-)', r'\1\n- ', field)
+    # Normalize whitespace and preserve line breaks
+    lines = [line.strip() for line in field.splitlines()]
+    return '\n'.join(line for line in lines if line)
 
 def sanitize_filename(name):
     """Sanitize the name to be safe for file system."""
