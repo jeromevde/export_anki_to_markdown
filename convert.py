@@ -35,51 +35,36 @@ def get_notes_in_deck(deck_name):
     return notes_info
 
 def clean_field(field):
-    """Convert HTML lists to Markdown with •, remove HTML tags, decode HTML entities, and preserve line breaks, including after TODO and similar markers. Also translate <br> and <div> blocks to whitespace, and ensure closing tags like </span></div> are also replaced by newlines. Handles <li> even if surrounded by any tags. PRESERVES newlines within <li>...</li>. Each bullet point is always on its own line, and only lines starting with • are bullets."""
+    """Convert HTML to Markdown using html2text, then replace - with • for bullet points, and remove extra blank lines between bullets. Also unescape - if needed. Uses html2text config to minimize blank lines and set bullet char."""
+    import html2text
+    import re
     import html
     if field is None:
         return ""
-    # Convert <br> and <div> (and variants) to newlines
-    field = re.sub(r'<br\s*/?>', '\n', field, flags=re.IGNORECASE)
-    field = re.sub(r'<div[^>]*>', '\n', field, flags=re.IGNORECASE)
-    field = re.sub(r'</div>', '\n', field, flags=re.IGNORECASE)
-    # Also replace closing </span> and similar inline tags with a newline if followed by </div> or </li>
-    field = re.sub(r'</span>\s*(</div>|</li>)', '\n', field, flags=re.IGNORECASE)
-
-    # Convert <li> even if surrounded by any tags to '\n• ...\n' and PRESERVE newlines inside
-    def li_replacer(m):
-        content = m.group(1)
-        # Remove leading/trailing whitespace but preserve internal newlines
-        content = re.sub(r'^[ \t\r\n]+|[ \t\r\n]+$', '', content)
-        # Remove any remaining HTML tags inside the <li> (except <br>, which is already replaced)
-        content = re.sub(r'<[^>]+>', '', content)
-        return '\n• ' + content.replace('\r', '') + '\n'
-    field = re.sub(r'(?:<[^>]*>)*<li[^>]*>([\s\S]*?)</li>(?:<[^>]*>)*', li_replacer, field, flags=re.IGNORECASE)
-
-    # Remove <ul>, <ol>, <span>, <p>, <b> tags
-    field = re.sub(r'</?(ul|ol|span|p|b)[^>]*>', '', field)
-    # Remove any other HTML tags
-    field = re.sub(r'<[^>]+>', '', field)
-    # Decode HTML entities (e.g., &gt; to >)
-    field = html.unescape(field)
-    # Ensure newlines after TODO or similar all-caps markers
-    field = re.sub(r'(\b[A-Z]{2,}\b)(-)', r'\1\n- ', field)
-    # Collapse 3+ newlines to 2 (but preserve newlines within list items)
-    field = re.sub(r'\n{3,}', '\n\n', field)
-    # Remove trailing whitespace on each line, but do not strip lines (to preserve bullet structure)
-    lines = [line.rstrip() for line in field.splitlines()]
-    # Only keep lines that are not empty, and for bullet lists, ensure only lines starting with '• ' are bullets
-    cleaned = []
-    for line in lines:
-        if line.strip():
-            if line.startswith('• '):
-                cleaned.append(line)
-            elif cleaned and cleaned[-1].startswith('• '):
-                # If previous line is a bullet, append this as part of the previous bullet (for multiline bullets)
-                cleaned[-1] += ' ' + line.strip()
-            else:
-                cleaned.append(line)
-    return '\n'.join(cleaned).strip('\n')
+    h = html2text.HTML2Text()
+    h.body_width = 0  # Don't wrap lines
+    h.single_line_break = True  # Only one line break for <br>
+    h.ignore_links = False
+    h.ignore_images = True
+    h.ignore_emphasis = False
+    h.bypass_tables = False
+    h.ul_item_mark = '•'  # Use • for bullets
+    h.protect_links = True
+    h.skip_internal_links = True
+    h.mark_code = False
+    h.google_doc = False
+    h.pad_tables = False
+    h.ignore_tables = True
+    h.list_indent = 0
+    h.unicode_snob = True
+    md = h.handle(field)
+    # Remove extra blank lines between bullets (• ...\n\n• ... -> • ...\n• ...)
+    md = re.sub(r'(• [^\n]+)\n{2,}(?=• )', r'\1\n', md)
+    # Unescape - if html2text escapes it (rare, but for completeness)
+    md = html.unescape(md)
+    # Optionally, clean up 3+ blank lines
+    md = re.sub(r'\n{3,}', '\n\n', md)
+    return md.strip()
 
 def sanitize_filename(name):
     """Sanitize the name to be safe for file system."""
